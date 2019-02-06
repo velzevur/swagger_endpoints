@@ -88,11 +88,7 @@ template_code() ->
    ?QUOTE(prepare_validation() ->
              case ets:info(jesse_ets) of
                undefined ->
-                 [ case jesse:add_schema(Def, Schema) of
-                     ok -> ok;
-                     Other ->
-                       Other
-                   end || {Def, Schema} <- definitions() ];
+                 [ jesse:add_schema(Def, Schema) || {Def, Schema} <- definitions() ];
                _ -> []
              end.),
    ?QUOTE(validate(Schema, Term) ->
