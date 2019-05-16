@@ -12,19 +12,20 @@ init(State) ->
   {ok, State1} = swagger_endpoints_prv:init(State),
   {ok, State1}.
 
-from_yaml(Doc, Options) ->
-  BaseUri =  proplists:get_value("basePath", Doc, "/"),
-  Endpoints = proplists:get_value("paths", Doc, []),
-  Definitions = 
-    build_definitions(proplists:get_value("definitions", Doc, []), [], Options),
-  {Definitions, endpoint_map(Endpoints,  #{}, [{defs, Definitions}, {baseuri, BaseUri} | Options])}.
+from_yaml(Doc, Options0) ->
+  BaseUri      = proplists:get_value("basePath", Doc, "/"),
+  Endpoints    = proplists:get_value("paths", Doc, []),
+  Definitions0 = proplists:get_value("definitions", Doc, []),
+  Parameters   = proplists:get_value("parameters", Doc, []),
+  Definitions  = build_definitions(Definitions0, [], Options0),
+  Options      = [{params, Parameters}, {defs, Definitions}, {baseuri, BaseUri} | Options0],
+  {Definitions, endpoint_map(Endpoints,  #{}, Options)}.
 
 build_definitions([], Definitions, _Options) ->
   Definitions;
 build_definitions([{Def, Schema} | Defs], Definitions, Options) ->
   NewDef = {"/definitions/" ++ Def, to_json_schema(Schema, [{defs, Definitions}|Options])},
   build_definitions(Defs, [NewDef | Definitions], Options).
-
 
 endpoint_map([], Map, _Options) ->
   Map;
@@ -41,14 +42,14 @@ method_part(Path, EP, Options) ->
     {false, {"get", Attr}} ->
       mk_operation(Path, Attr, get, Options);
     {true, true} ->
-      throw({error, "use either method POST or GET in", Path}); 
+      throw({error, "use either method POST or GET in", Path});
     {false, false} ->
       throw({error, "need method POST or GET in", Path})
   end.
 
 mk_operation(Path, Attr, Method, Options) ->
-  BaseUri = 
-    iolist_to_binary(string:trim(proplists:get_value(baseuri, Options, "/"), trailing, "/")), 
+  BaseUri =
+    iolist_to_binary(string:trim(proplists:get_value(baseuri, Options, "/"), trailing, "/")),
   BPath = iolist_to_binary(Path),
   IdName = get_value("operationId", proplists:get_value(id_type, Options, atom), Attr, Path),
   Tags = get_value("tags", {list, binary}, Attr, Path, []),
@@ -59,7 +60,7 @@ mk_operation(Path, Attr, Method, Options) ->
     end,
   Responses =
     maps:from_list(get_value("responses", {list, ReadResponse}, Attr, Path, [])),
-  {IdName, #{Method => #{ 
+  {IdName, #{Method => #{
                 path => <<BaseUri/binary, BPath/binary>>,
                 tags => Tags,
                 parameters => params_to_json_schema(Params, [{endpoint, IdName} | Options]),
@@ -95,16 +96,16 @@ get_value(Name, Type, Attr, Path, Default) ->
 
 response(StatusCode, Resp, Options) ->
   StrictCompilation = proplists:get_value(strict, Options, false),
-  Code = 
-    try {SC, []} = string:to_integer(StatusCode), SC    
+  Code =
+    try {SC, []} = string:to_integer(StatusCode), SC
     catch
       _:_ ->
-        rebar_api:error("Response status code for path ~p cannot be parsed (~p, ~p)", 
+        rebar_api:error("Response status code for path ~p cannot be parsed (~p, ~p)",
                         [ proplists:get_value(path, Options), StatusCode, Resp])
     end,
   case proplists:get_value("schema", Resp) of
     undefined when StrictCompilation ->
-      rebar_api:warn("Empty response body for path ~p (~p, ~p)", 
+      rebar_api:warn("Empty response body for path ~p (~p, ~p)",
                      [ proplists:get_value(path, Options), StatusCode, Resp]),
       {Code, undefined};
     undefined -> {Code, undefined};
@@ -114,20 +115,33 @@ response(StatusCode, Resp, Options) ->
   end .
 
 params_to_json_schema([], Options) ->
-  rebar_api:error("~p: use YAML array for parameters not JSON array!", 
+  rebar_api:error("~p: use YAML array for parameters not JSON array!",
                   [proplists:get_value(endpoint, Options)]),
   [];
 params_to_json_schema(null, _Options) ->
   [];
 params_to_json_schema(Params, Options) ->
-  %% According to swagger.io even a parameter may have a "schema:" 
-  [ begin 
-      Schema = proplists:get_value("schema", Param, mk_param_to_schema(Param, Options)),
-      lists:keydelete("schema", 1, Param) ++ [{"schema", to_json_schema(Schema, Options)}]
+  [ case proplists:get_value("$ref", Param, none) of
+      none ->
+        case proplists:get_value("schema", Param, none) of
+          none ->
+            Param;
+          Schema ->
+            %% Schema = proplists:get_value("schema", Param, mk_param_to_schema(Param, Options)),
+            lists:keydelete("schema", 1, Param) ++ [{"schema", to_json_schema(Schema, Options)}]
+        end;
+      "#/parameters/" ++ Ref ->
+        ParamRefs = proplists:get_value(params, Options, []),
+        case lists:keyfind(Ref, 1, ParamRefs) of
+          false ->
+            rebar_api:error("Undefined parameter $ref: ~p\n", [Ref]);
+          {Ref, InlineParams} ->
+            InlineParams
+        end
     end || Param <- Params ].
 
 mk_param_to_schema(Param, _Options) ->
-  [ {K, V} || {K, V} <- Param, 
+  [ {K, V} || {K, V} <- Param,
               not lists:member(K, ["required", "example", "description", "name", "in"])].
 
 to_json_schema(Schema, Options) ->
@@ -137,7 +151,7 @@ to_json_schema(Schema, Options) ->
   Result.
 
 jesse_json_schema(Schema, Options) when is_list(Schema) ->
-  lists:foldl(fun(Item, Acc) -> 
+  lists:foldl(fun(Item, Acc) ->
                   maps:merge(to_json_schema(Item, Options), Acc)
               end, #{}, Schema);
 jesse_json_schema({"$ref", Reference}, _Options) ->
@@ -146,7 +160,7 @@ jesse_json_schema({"$ref", Reference}, _Options) ->
 jesse_json_schema({Key, Items}, _Options) when Key == "required"; Key == "enum" ->
   BinKey = list_to_binary(Key),
   #{BinKey => [ list_to_binary(Item) || Item <- Items ]};
-jesse_json_schema({Key, Value}, _Options) when 
+jesse_json_schema({Key, Value}, _Options) when
     is_number(Value); is_boolean(Value); is_binary(Value) ->
   BinKey = list_to_binary(Key),
   #{BinKey => Value};
