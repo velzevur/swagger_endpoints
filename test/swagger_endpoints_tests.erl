@@ -6,6 +6,9 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-define(OAS2, "2.0").
+-define(OAS3, "3.0.0").
+
 -define(TEST_MODULE, swagger_endpoints).
 
 from_yaml_test_() ->
@@ -16,26 +19,183 @@ from_yaml_test_() ->
       fun(_) ->
           application:stop(yamerl)
       end,
-      [ {"Parses single definition", fun parses_definition/0}
+      [ {"Parses single definition", fun parses_single_definition/0}
+      , {"Parses various definitions", fun parses_definitions/0}
+      , {"Parses single endpoint and a definition", fun parses_single_endpoint/0}
+      , {"Parses complex scenario", fun parses_complex_scenario/0}
       ]}.
 
-parses_definition() ->
-    Props =
-        #{ paths => [req_current_keyblock_height(),
-                     req_get_current_keyblock(),
-                     req_get_keyblock_by_hash()
-                    ]
-        , definitions => [d_uint(), d_uint16(), d_uint32(), d_uint64(), d_txblockheight(),
-                          d_encodedhash(), d_encodedpubkey(), d_encodedbytearray(),
-                          d_error(),
-                          d_pow(),
-                          d_keyblock()
-                         ]},
-    V2Yaml = yaml(Props#{ swagger => "2.0"}),
-    _Expected = ?TEST_MODULE:from_yaml(V2Yaml, []).
+parses_single_definition() ->
+    Gen =
+        fun(Vsn) ->
+            #{ swagger => Vsn
+             , paths => []
+             , definitions => [d_uint()]}
+        end,
+    Expected =
+        fun(OASVersion) ->
+            D = definitions(OASVersion),
+            {[ {D ++ "UInt", #{<<"minimum">> => 0, <<"type">> => <<"integer">>}}
+            ], #{}}
+      end,
+    V2Yaml = yaml(Gen(?OAS2)),
+    V2Expected = Expected(?OAS2),
+    V2Expected = ?TEST_MODULE:from_yaml(V2Yaml, []),
+    V3Yaml = yaml(Gen(?OAS3)),
+    V3Expected = Expected(?OAS3),
+    V3Expected = ?TEST_MODULE:from_yaml(V3Yaml, []).
+
+parses_definitions() ->
+    Gen =
+        fun(Vsn) ->
+            #{ swagger => Vsn
+             , paths => [
+                        ]
+             , definitions => [d_uint(), d_uint16(), d_uint32(), d_uint64(), d_txblockheight(),
+                               d_encodedhash(), d_encodedpubkey(), d_encodedbytearray(),
+                               d_error(),
+                               d_pow(Vsn),
+                               d_keyblock(Vsn)
+                             ]}
+        end,
+    Expected =
+        fun(OASVersion) ->
+            D = definitions(OASVersion),
+            B = list_to_binary(D),
+            {[{D ++ "KeyBlock", #{<<"properties">> => #{<<"beneficiary">> => #{<<"$ref">> => <<B/binary, "EncodedPubkey">>},
+                                                        <<"hash">> => #{<<"$ref">> => <<B/binary, "EncodedHash">>},
+                                                        <<"height">> => #{<<"$ref">> => <<B/binary, "UInt64">>},
+                                                        <<"info">> => #{<<"$ref">> => <<B/binary, "EncodedByteArray">>},
+                                                        <<"miner">> => #{<<"$ref">> => <<B/binary, "EncodedPubkey">>},
+                                                        <<"nonce">> => #{<<"$ref">> => <<B/binary, "UInt64">>},
+                                                        <<"pow">> => #{<<"$ref">> => <<B/binary, "Pow">>},
+                                                        <<"prev_hash">> => #{<<"$ref">> => <<B/binary, "EncodedHash">>},
+                                                        <<"prev_key_hash">> => #{<<"$ref">> => <<B/binary, "EncodedHash">>},
+                                                        <<"state_hash">> => #{<<"$ref">> => <<B/binary, "EncodedHash">>},
+                                                        <<"target">> => #{<<"$ref">> => <<B/binary, "UInt32">>},
+                                                        <<"time">> => #{<<"$ref">> => <<B/binary, "UInt64">>},
+                                                        <<"version">> => #{<<"$ref">> => <<B/binary, "UInt32">>}},
+                                  <<"required">> => [<<"beneficiary">>,<<"hash">>, <<"height">>,<<"info">>,<<"miner">>,
+                                                     <<"nonce">>,<<"pow">>,<<"prev_hash">>, <<"prev_key_hash">>,<<"state_hash">>,
+                                                     <<"target">>,<<"time">>,<<"version">>],
+                                  <<"type">> => <<"object">>}},
+              {D ++ "Pow", #{<<"items">> => #{<<"$ref">> => <<B/binary, "UInt32">>}, <<"maxItems">> => 42, <<"minItems">> => 42, <<"type">> => <<"array">>}},
+              {D ++ "Error", #{<<"properties">> => #{<<"reason">> => #{<<"type">> => <<"string">>}}, <<"required">> => [<<"reason">>], <<"type">> => <<"object">>}},
+              {D ++ "EncodedByteArray", #{<<"description">> => <<"Base64Check encoded tagged byte array">>, <<"type">> => <<"string">>}},
+              {D ++ "EncodedPubkey", #{<<"description">> => <<"Base58Check encoded tagged pubkey">>, <<"type">> => <<"string">>}},
+              {D ++ "EncodedHash", #{<<"description">> => <<"Base58Check encoded tagged hash">>, <<"type">> => <<"string">>}},
+              {D ++ "TxBlockHeight", #{<<"maximum">> => 18446744073709551615, <<"minimum">> => -1, <<"type">> => <<"integer">>}},
+              {D ++ "UInt64", #{<<"maximum">> => 18446744073709551615, <<"minimum">> => 0, <<"type">> => <<"integer">>}},
+              {D ++ "UInt32", #{<<"maximum">> => 4294967295, <<"minimum">> => 0, <<"type">> => <<"integer">>}},
+              {D ++ "UInt16", #{<<"maximum">> => 65535,<<"minimum">> => 0, <<"type">> => <<"integer">>}},
+              {D ++ "UInt", #{<<"minimum">> => 0, <<"type">> => <<"integer">>}}
+            ], #{}}
+      end,
+    V2Yaml = yaml(Gen(?OAS2)),
+    V2Expected = Expected(?OAS2),
+    V2Expected = ?TEST_MODULE:from_yaml(V2Yaml, []),
+    V3Yaml = yaml(Gen(?OAS3)),
+    V3Expected = Expected(?OAS3),
+    V3Expected = ?TEST_MODULE:from_yaml(V3Yaml, []).
+
+parses_single_endpoint() ->
+    Gen =
+        fun(Vsn) ->
+            #{ swagger => Vsn
+             , paths => [req_current_keyblock_height(Vsn)]
+             , definitions => [d_uint()]}
+        end,
+    Expected =
+        fun(OASVersion) ->
+            D = definitions(OASVersion),
+            B = list_to_binary(D),
+            {[ {D ++ "UInt", #{<<"minimum">> => 0, <<"type">> => <<"integer">>}}
+            ],
+             #{'GetCurrentKeyBlockHeight' =>
+                #{get => #{parameters => [], path => <<"/v2/key-blocks/current/height">>,
+                           responses => #{200 => #{<<"properties">> => #{<<"height">> => #{<<"$ref">> => <<B/binary, "UInt16">>, <<"description">> => <<"Height">>}}, <<"type">> => <<"object">>},
+                                          404 => #{<<"$ref">> => <<B/binary, "Error">>}},
+                            tags => [<<"external">>,<<"chain">>]}}}}
+      end,
+    V2Yaml = yaml(Gen(?OAS2)),
+    V2Expected = Expected(?OAS2),
+    V2Expected = ?TEST_MODULE:from_yaml(V2Yaml, []),
+    V3Yaml = yaml(Gen(?OAS3)),
+    V3Expected = Expected(?OAS3),
+    V3Expected = ?TEST_MODULE:from_yaml(V3Yaml, []),
+    ok.
+
+
+parses_complex_scenario() ->
+    Gen =
+        fun(Vsn) ->
+            #{ swagger => Vsn
+             , paths => [ req_current_keyblock_height(Vsn)
+                        , req_get_current_keyblock(Vsn)
+                        , req_get_keyblock_by_hash(Vsn)
+                        ]
+             , definitions => [d_uint(), d_uint16(), d_uint32(), d_uint64(), d_txblockheight(),
+                               d_encodedhash(), d_encodedpubkey(), d_encodedbytearray(),
+                               d_error(),
+                               d_pow(Vsn),
+                               d_keyblock(Vsn)
+                             ]}
+        end,
+    Expected =
+        fun(OASVersion) ->
+            D = definitions(OASVersion),
+            B = list_to_binary(D),
+            {[{D ++ "KeyBlock", #{<<"properties">> => #{<<"beneficiary">> => #{<<"$ref">> => <<B/binary, "EncodedPubkey">>},
+                                                        <<"hash">> => #{<<"$ref">> => <<B/binary, "EncodedHash">>},
+                                                        <<"height">> => #{<<"$ref">> => <<B/binary, "UInt64">>},
+                                                        <<"info">> => #{<<"$ref">> => <<B/binary, "EncodedByteArray">>},
+                                                        <<"miner">> => #{<<"$ref">> => <<B/binary, "EncodedPubkey">>},
+                                                        <<"nonce">> => #{<<"$ref">> => <<B/binary, "UInt64">>},
+                                                        <<"pow">> => #{<<"$ref">> => <<B/binary, "Pow">>},
+                                                        <<"prev_hash">> => #{<<"$ref">> => <<B/binary, "EncodedHash">>},
+                                                        <<"prev_key_hash">> => #{<<"$ref">> => <<B/binary, "EncodedHash">>},
+                                                        <<"state_hash">> => #{<<"$ref">> => <<B/binary, "EncodedHash">>},
+                                                        <<"target">> => #{<<"$ref">> => <<B/binary, "UInt32">>},
+                                                        <<"time">> => #{<<"$ref">> => <<B/binary, "UInt64">>},
+                                                        <<"version">> => #{<<"$ref">> => <<B/binary, "UInt32">>}},
+                                  <<"required">> => [<<"beneficiary">>,<<"hash">>, <<"height">>,<<"info">>,<<"miner">>,
+                                                     <<"nonce">>,<<"pow">>,<<"prev_hash">>, <<"prev_key_hash">>,<<"state_hash">>,
+                                                     <<"target">>,<<"time">>,<<"version">>],
+                                  <<"type">> => <<"object">>}},
+              {D ++ "Pow", #{<<"items">> => #{<<"$ref">> => <<B/binary, "UInt32">>}, <<"maxItems">> => 42, <<"minItems">> => 42, <<"type">> => <<"array">>}},
+              {D ++ "Error", #{<<"properties">> => #{<<"reason">> => #{<<"type">> => <<"string">>}}, <<"required">> => [<<"reason">>], <<"type">> => <<"object">>}},
+              {D ++ "EncodedByteArray", #{<<"description">> => <<"Base64Check encoded tagged byte array">>, <<"type">> => <<"string">>}},
+              {D ++ "EncodedPubkey", #{<<"description">> => <<"Base58Check encoded tagged pubkey">>, <<"type">> => <<"string">>}},
+              {D ++ "EncodedHash", #{<<"description">> => <<"Base58Check encoded tagged hash">>, <<"type">> => <<"string">>}},
+              {D ++ "TxBlockHeight", #{<<"maximum">> => 18446744073709551615, <<"minimum">> => -1, <<"type">> => <<"integer">>}},
+              {D ++ "UInt64", #{<<"maximum">> => 18446744073709551615, <<"minimum">> => 0, <<"type">> => <<"integer">>}},
+              {D ++ "UInt32", #{<<"maximum">> => 4294967295, <<"minimum">> => 0, <<"type">> => <<"integer">>}},
+              {D ++ "UInt16", #{<<"maximum">> => 65535,<<"minimum">> => 0, <<"type">> => <<"integer">>}},
+              {D ++ "UInt", #{<<"minimum">> => 0, <<"type">> => <<"integer">>}}
+            ],
+            #{'GetCurrentKeyBlock' => #{get => #{parameters => [], path => <<"/v2/key-blocks/current">>,
+                                                responses => #{200 => #{<<"$ref">> => <<B/binary, "KeyBlock">>}, 404 => #{<<"$ref">> => <<B/binary, "Error">>}},
+                                                tags => [<<"external">>,<<"chain">>]}},
+            'GetCurrentKeyBlockHeight' => #{get => #{parameters => [], path => <<"/v2/key-blocks/current/height">>,
+                                                      responses => #{200 => #{<<"properties">> => #{<<"height">> => #{<<"$ref">> => <<B/binary, "UInt16">>, <<"description">> => <<"Height">>}}, <<"type">> => <<"object">>},
+                                                                    404 => #{<<"$ref">> => <<B/binary, "Error">>}},
+                                                      tags => [<<"external">>,<<"chain">>]}},
+            'GetKeyBlockByHash' => #{get => #{parameters => [[{"in","path"}, {"name","hash"}, {"description", "The hash of the block"}, {"required",true}, {"type","string"}]], path => <<"/v2/key-blocks/hash/{hash}">>,
+                                              responses => #{200 => #{<<"$ref">> => <<B/binary, "KeyBlock">>},
+                                                             400 => #{<<"$ref">> => <<B/binary, "Error">>},
+                                                             404 => #{<<"$ref">> => <<B/binary, "Error">>}},
+                                              tags => [<<"external">>, <<"chain">>]}}}}
+      end,
+    V2Yaml = yaml(Gen(?OAS2)),
+    V2Expected = Expected(?OAS2),
+    V2Expected = ?TEST_MODULE:from_yaml(V2Yaml, []),
+    V3Yaml = yaml(Gen(?OAS3)),
+    V3Expected = Expected(?OAS3),
+    V3Expected = ?TEST_MODULE:from_yaml(V3Yaml, []).
 
 yaml(Opts) ->
     G = fun(K, Def) -> maps:get(K, Opts, Def) end,
+    OASVersion = G(swagger, ?OAS2),
     Tags =
         multiline(lists:map(
             fun({Name, Descr}) ->
@@ -50,36 +210,62 @@ yaml(Opts) ->
     Schemes =
         multiline(lists:map(
             fun(Scheme) -> "  - " ++ Scheme end, G(schemes, ["http"]))),
-    Paths =
+    Paths1 =
         multiline(lists:map(
             fun({URL, Methods}) ->
                 EncMethods =
                     multiline(lists:map(
-                        fun encode_method/1,
+                        fun(M) -> encode_method(M, OASVersion) end,
                         Methods)),
                 multiline(
                     [ "  " ++ URL ++ ":"
                     , EncMethods])
             end,
             G(paths, []))),
+    Paths =
+        case length(Paths1) =:= 0 of
+            true ->  "paths: []";
+            false -> "paths:\n" ++ Paths1
+        end,
     Definitions =
-        multiline(lists:map(fun enc_definition/1, G(definitions, []))),
+        multiline(lists:map(fun(D) -> enc_definition(D, OASVersion) end, G(definitions, []))),
     Str =
-        multiline(
-            [ "swagger: '" ++ G(swagger, "2.0") ++ "'"
-            , "info:"
-            , "  description: '" ++ G(description, "This is the [Aeternity](https://www.aeternity.com/) node API.") ++ "'"
-            , "  version: " ++ G(version, "x.y.z")
-            , "  title: " ++ G(title, "Aeternity node")
-            , "  termsOfService: '" ++ G(tos, "https://www.aeternity.com/terms/") ++ "'"
-            , "  contact:"
-            , "    email: " ++ G(email, "apiteam@aeternity.com")
-            , "basePath: " ++ G(basePath, "/v2")
-            , "tags:\n" ++ Tags
-            , "schemes:\n" ++ Schemes 
-            , "paths:\n" ++ Paths
-            , "definitions:\n" ++ Definitions
-            ]),
+        case OASVersion of
+            ?OAS2 ->
+                multiline(
+                    [ "swagger: '" ++ OASVersion ++ "'"
+                    , "info:"
+                    , "  description: '" ++ G(description, "This is the [Aeternity](https://www.aeternity.com/) node API.") ++ "'"
+                    , "  version: " ++ G(version, "x.y.z")
+                    , "  title: " ++ G(title, "Aeternity node")
+                    , "  termsOfService: '" ++ G(tos, "https://www.aeternity.com/terms/") ++ "'"
+                    , "  contact:"
+                    , "    email: " ++ G(email, "apiteam@aeternity.com")
+                    , "basePath: " ++ G(basePath, "/v2")
+                    , "tags:\n" ++ Tags
+                    , "schemes:\n" ++ Schemes 
+                    , Paths
+                    , "definitions:\n" ++ Definitions
+                    ]);
+            ?OAS3 ->
+                multiline(
+                    [ "openapi: '" ++ OASVersion ++ "'"
+                    , "info:"
+                    , "  description: '" ++ G(description, "This is the [Aeternity](https://www.aeternity.com/) node API.") ++ "'"
+                    , "  version: " ++ G(version, "x.y.z")
+                    , "  title: " ++ G(title, "Aeternity node")
+                    , "  termsOfService: '" ++ G(tos, "https://www.aeternity.com/terms/") ++ "'"
+                    , "  contact:"
+                    , "    email: " ++ G(email, "apiteam@aeternity.com")
+                    , "servers: "
+                    , "  - url: " ++ G(basePath, "/v2")
+                    , "tags:\n" ++ Tags
+                    , Paths
+                    , "components:"
+                    , "  schemas:\n"++ Definitions
+                    ])
+        end,
+%    1 = Str,
     [Yaml] =yamerl_constr:string(Str),
     Yaml.
 
@@ -89,7 +275,8 @@ encode_method({Method, #{ tags        := Tags0
                         , operationid := OperationId
                         , description := Description
                         , parameters  := Parameters0
-                        , responses   := Responses0}}) ->
+                        , responses   := Responses0}},
+              OASVersion) ->
     Tags =
         multiline(lists:map(
             fun(T) -> "        - " ++ T end, Tags0)),
@@ -100,12 +287,23 @@ encode_method({Method, #{ tags        := Tags0
                  , description := ParamDesr
                  , required := Required
                  , type := Type }) ->
-                multiline(
-                    [ "        - in: " ++ In
-                    , "          name: " ++ Name
-                    , "          description: '" ++ ParamDesr ++ "'"
-                    , "          required: " ++ Required
-                    , "          type: " ++ Type])
+                case OASVersion of
+                    ?OAS2 ->
+                        multiline(
+                            [ "        - in: " ++ In
+                            , "          name: " ++ Name
+                            , "          description: '" ++ ParamDesr ++ "'"
+                            , "          required: " ++ Required
+                            , "          type: " ++ Type]);
+                    ?OAS3 ->
+                        multiline(
+                            [ "        - in: " ++ In
+                            , "          name: " ++ Name
+                            , "          description: '" ++ ParamDesr ++ "'"
+                            , "          required: " ++ Required
+                            , "          schema:\n"
+                            , "            type: " ++ Type])
+                end
             end,
             Parameters0)),
     Parameters =
@@ -117,10 +315,21 @@ encode_method({Method, #{ tags        := Tags0
         multiline(lists:map(
             fun({Code, #{ description := RespDesr
                         , schema := Schema}}) ->
-                multiline(
-                    [ "        '" ++ integer_to_list(Code) ++ "':"
-                    , "          description: '" ++ RespDesr ++ "'" 
-                    , "          schema:\n" ++ encode_schema(Schema)])
+
+                case OASVersion of
+                    ?OAS2 ->
+                        multiline(
+                            [ "        '" ++ integer_to_list(Code) ++ "':"
+                            , "          description: '" ++ RespDesr ++ "'" 
+                            , "          schema:\n" ++ encode_schema(Schema, "")]);
+                    ?OAS3 ->
+                        multiline(
+                            [ "        '" ++ integer_to_list(Code) ++ "':"
+                            , "          description: '" ++ RespDesr ++ "'" 
+                            , "          content:\n"
+                            , "            application/json:\n"
+                            , "              schema:\n" ++ encode_schema(Schema, "    ")])
+                end
             end,
             Responses0)),
     multiline(
@@ -134,84 +343,79 @@ encode_method({Method, #{ tags        := Tags0
         , "      responses:\n" ++ Responses]).
 
 
-encode_schema({ref, Ref}) ->
-    "            $ref: '" ++ Ref ++ "'";
-encode_schema({object, Properties0}) ->
+encode_schema({ref, Ref}, Prefix) ->
+    Prefix ++ "            $ref: '" ++ Ref ++ "'";
+encode_schema({object, Properties0}, Prefix) ->
     Properties =
         multiline(lists:map(
             fun({Name, #{ description := Descr
                         , ref := Ref}}) ->
                 multiline(
-                    [ "              " ++ Name ++ ":"
-                    , "                description: '" ++ Descr ++ "'"
-                    , "                $ref: '" ++ Ref ++ "'"])
+                    [ Prefix ++ "              " ++ Name ++ ":"
+                    , Prefix ++ "                description: '" ++ Descr ++ "'"
+                    , Prefix ++ "                $ref: '" ++ Ref ++ "'"])
             end,
             Properties0)),
     multiline(
-        [ "            type: object"
-        , "            properties:\n" ++ Properties]).
+        [ Prefix ++ "            type: object"
+        , Prefix ++ "            properties:\n" ++ Properties]).
 
-enc_definition({Name, Type, Opts}) when Type =:= integer;
-                                        Type =:= string ->
-    OFun =
-        fun(Key) ->
-            case maps:find(Key, Opts) of
-                {ok, Val} when is_integer(Val) -> ["    " ++ atom_to_list(Key) ++ ": " ++ integer_to_list(Val)];
-                {ok, Val} when is_list(Val)    -> ["    " ++ atom_to_list(Key) ++ ": '" ++ Val ++ "'"];
-                error -> []
-            end
+enc_definition(Spec, OASVersion) ->
+    VPrefix =
+        case OASVersion of
+            ?OAS2 -> "";
+            ?OAS3 -> "  "
         end,
-    Optionals = [OFun(E) || E <- [minimum, maximum, description]],
-    multiline(
-      [ "  " ++ Name ++ ":"
-      , "    type: " ++ atom_to_list(Type)
-      ] ++ Optionals);
-enc_definition({Name, array, Ref, Opts}) ->
-    OFun =
-        fun(Key) ->
-            case maps:find(Key, Opts) of
-                {ok, Val} when is_integer(Val) -> ["    " ++ atom_to_list(Key) ++ ": " ++ integer_to_list(Val)];
-                {ok, Val} when is_list(Val)    -> ["    " ++ atom_to_list(Key) ++ ": '" ++ Val ++ "'"];
-                error -> []
-            end
-        end,
-    Optionals = [OFun(E) || E <- [minItems, maxItems, description]],
-    multiline(
-      [ "  " ++ Name ++ ":"
-      , "    type: array"
-      , "    items:"
-      , "      $ref: '" ++ Ref ++ "'"
-      ] ++ Optionals);
-enc_definition({Name, object, Properties0, Required0, Opts}) ->
-    OFun =
-        fun(Key) ->
-            case maps:find(Key, Opts) of
-                {ok, Val} when is_integer(Val) -> ["    " ++ atom_to_list(Key) ++ ": " ++ integer_to_list(Val)];
-                {ok, Val} when is_list(Val)    -> ["    " ++ atom_to_list(Key) ++ ": '" ++ Val ++ "'"];
-                error -> []
-            end
-        end,
-    Optionals = [OFun(E) || E <- [minItems, maxItems, description]],
-    Properties =
-        multiline(lists:map(
-            fun({K, Ref}) when is_list(Ref) ->
-                "      " ++ atom_to_list(K) ++ ":\n" ++
-                "        $ref: '" ++ Ref ++ "'";
-               ({K, Type}) when Type =:= integer; Type =:= string ->
-                "      " ++ atom_to_list(K) ++ ":\n" ++
-                "        type: " ++ atom_to_list(Type)
-            end,
-            maps:to_list(Properties0))),
-    Required = 
-        multiline(lists:map(
-            fun(K) -> "      - " ++ atom_to_list(K) end,
-            Required0)),
-    multiline(
-      [ "  " ++ Name ++ ":"
-      , "    type: object"
-      , "    properties:\n" ++ Properties
-      , "    required:\n" ++ Required 
-      ] ++ Optionals).
+    GetOptionals =
+        fun(Keys, Opts) ->
+              lists:filtermap(
+                  fun(Key) ->
+                      case maps:find(Key, Opts) of
+                          {ok, Val} when is_integer(Val) -> {true, VPrefix ++ "    " ++ atom_to_list(Key) ++ ": " ++ integer_to_list(Val)};
+                          {ok, Val} when is_list(Val)    -> {true, VPrefix ++ "    " ++ atom_to_list(Key) ++ ": '" ++ Val ++ "'"};
+                          error -> false
+                      end
+                  end,
+                  Keys) end,
+    case Spec of
+        {Name, Type, Opts} when Type =:= integer;
+                                Type =:= string ->
+            Optionals = GetOptionals([minimum, maximum, description], Opts),
+            multiline(
+              [ VPrefix ++ "  " ++ Name ++ ":"
+              , VPrefix ++ "    type: " ++ atom_to_list(Type)
+              ] ++ Optionals);
+        {Name, array, Ref, Opts} ->
+            Optionals = GetOptionals([minItems, maxItems, description], Opts),
+            multiline(
+              [ VPrefix ++ "  " ++ Name ++ ":"
+              , VPrefix ++ "    type: array"
+              , VPrefix ++ "    items:"
+              , VPrefix ++ "      $ref: '" ++ Ref ++ "'"
+              ] ++ Optionals);
+        {Name, object, Properties0, Required0, Opts} ->
+            Optionals = GetOptionals([description], Opts),
+            Properties =
+                multiline(lists:map(
+                    fun({K, Ref}) when is_list(Ref) ->
+                        VPrefix ++ "      " ++ atom_to_list(K) ++ ":\n" ++
+                        VPrefix ++ "        $ref: '" ++ Ref ++ "'";
+                      ({K, Type}) when Type =:= integer; Type =:= string ->
+                        VPrefix ++ "      " ++ atom_to_list(K) ++ ":\n" ++
+                        VPrefix ++ "        type: " ++ atom_to_list(Type)
+                    end,
+                    maps:to_list(Properties0))),
+            Required = 
+                multiline(lists:map(
+                    fun(K) -> VPrefix ++ "      - " ++ atom_to_list(K) end,
+                    Required0)),
+            multiline(
+              [ VPrefix ++ "  " ++ Name ++ ":"
+              , VPrefix ++ "    type: object"
+              , VPrefix ++ "    properties:\n" ++ Properties
+              , VPrefix ++ "    required:\n" ++ Required 
+              ] ++ Optionals)
+    end.
 
 request_method(Method, Tags, OperationId, Description, Params, Responses) ->
     {Method, #{ tags        => Tags
@@ -223,27 +427,27 @@ request_method(Method, Tags, OperationId, Description, Params, Responses) ->
 response(Code, Desc, Schema) ->
     {Code, #{description => Desc, schema => Schema}}.
 
-req_current_keyblock_height() ->
+req_current_keyblock_height(OASVersion) ->
     Resp =
         {object, [{"height",
                     #{ description => "Height"
-                    , ref => "#/definitions/UInt16"}}]},
+                    , ref => "#" ++ definitions(OASVersion) ++ "UInt16"}}]},
     Get =
         request_method("get", ["external", "chain"],
                       "GetCurrentKeyBlockHeight", "Get the height of the current key block",
                       [], [success_response(Resp),
-                           error_response(404, "Block not found")]),
+                           error_response(404, "Block not found", OASVersion)]),
     {"/key-blocks/current/height", [Get]}.
 
-req_get_current_keyblock() ->
+req_get_current_keyblock(OASVersion) ->
     Get =
         request_method("get", ["external", "chain"],
                       "GetCurrentKeyBlock", "Get the current key block",
-                      [], [success_response({ref, "#/definitions/KeyBlock"}),
-                           error_response(404, "Block not found")]),
+                      [], [success_response({ref, "#" ++ definitions(OASVersion) ++ "KeyBlock"}),
+                           error_response(404, "Block not found", OASVersion)]),
     {"/key-blocks/current", [Get]}.
 
-req_get_keyblock_by_hash() ->
+req_get_keyblock_by_hash(OASVersion) ->
     Params =
         [#{ in => "path"
           , name => "hash"
@@ -254,16 +458,16 @@ req_get_keyblock_by_hash() ->
         request_method("get", ["external", "chain"],
                       "GetKeyBlockByHash", "Get a key block by hash",
                       Params,
-                      [ success_response({ref, "#/definitions/KeyBlock"}),
-                        error_response(404, "Block not found"),
-                        error_response(400, "Invalid hash")]),
+                      [ success_response({ref, "#" ++ definitions(OASVersion) ++ "KeyBlock"}),
+                        error_response(404, "Block not found", OASVersion),
+                        error_response(400, "Invalid hash", OASVersion)]),
     {"/key-blocks/hash/{hash}", [Get]}.
     
 success_response(RespObj) ->
     response(200, "Successful operation", RespObj).
 
-error_response(Code, Description) ->
-    response(Code, Description, {ref, "#/definitions/Error"}).
+error_response(Code, Description, OASVersion) ->
+    response(Code, Description, {ref, "#" ++ definitions(OASVersion) ++ "Error"}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% definitions
@@ -292,26 +496,28 @@ d_encodedpubkey() ->
 d_encodedbytearray() ->
     {"EncodedByteArray", string, #{description => "Base64Check encoded tagged byte array"}}.
 
-d_pow() ->
-    {"Pow", array, "#/definitions/UInt32", #{minItems => 42, maxItems => 42}}.
+d_pow(OASVersion) ->
+    {"Pow", array, "#" ++ definitions(OASVersion) ++ "UInt32", #{minItems => 42, maxItems => 42}}.
 
 d_error() ->
     {"Error", object, #{reason => string}, [reason], #{}}.
 
-d_keyblock() ->
-    Properties = #{ hash => "#/definitions/EncodedHash"
-                  , height => "#/definitions/UInt64"
-                  , prev_hash => "#/definitions/EncodedHash"
-                  , prev_key_hash => "#/definitions/EncodedHash"
-                  , state_hash => "#/definitions/EncodedHash"
-                  , miner => "#/definitions/EncodedPubkey"
-                  , beneficiary => "#/definitions/EncodedPubkey"
-                  , target => "#/definitions/UInt32"
-                  , pow => "#/definitions/Pow"
-                  , nonce => "#/definitions/UInt64"
-                  , time => "#/definitions/UInt64"
-                  , version => "#/definitions/UInt32"
-                  , info => "#/definitions/EncodedByteArray"},
+d_keyblock(OASVersion) ->
+    Properties = #{ hash => "#" ++ definitions(OASVersion) ++ "EncodedHash"
+                  , height => "#" ++ definitions(OASVersion) ++ "UInt64"
+                  , prev_hash => "#" ++ definitions(OASVersion) ++ "EncodedHash"
+                  , prev_key_hash => "#" ++ definitions(OASVersion) ++ "EncodedHash"
+                  , state_hash => "#" ++ definitions(OASVersion) ++ "EncodedHash"
+                  , miner => "#" ++ definitions(OASVersion) ++ "EncodedPubkey"
+                  , beneficiary => "#" ++ definitions(OASVersion) ++ "EncodedPubkey"
+                  , target => "#" ++ definitions(OASVersion) ++ "UInt32"
+                  , pow => "#" ++ definitions(OASVersion) ++ "Pow"
+                  , nonce => "#" ++ definitions(OASVersion) ++ "UInt64"
+                  , time => "#" ++ definitions(OASVersion) ++ "UInt64"
+                  , version => "#" ++ definitions(OASVersion) ++ "UInt32"
+                  , info => "#" ++ definitions(OASVersion) ++ "EncodedByteArray"},
     Required = maps:keys(Properties),
     {"KeyBlock", object, Properties, Required, #{}}.
 
+definitions(?OAS2) -> "/definitions/";
+definitions(?OAS3) -> "/components/schemas/".
