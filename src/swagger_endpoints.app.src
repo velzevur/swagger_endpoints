@@ -1,6 +1,6 @@
 {application, swagger_endpoints,
  [{description, "A rebar plugin to generate code for swagger endpoints"},
-  {vsn, "0.2.1"},
+  {vsn, "0.2.2"},
   {registered, []},
   {applications,
    [kernel,
@@ -10,7 +10,7 @@
   {env,[]},
   {modules, []},
 
-  {maintainers, ["Thomas Arts"]},
+  {maintainers, ["Thomas Arts", "Dimitar Ivanov"]},
   {licenses, ["MIT"]},
   {links, []}
  ]}.

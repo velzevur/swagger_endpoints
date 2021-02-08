@@ -75,6 +75,11 @@ mk_operation(Path, Attr, Method, Options, OASVersion) ->
   IdName = get_value("operationId", proplists:get_value(id_type, Options, atom), Attr, Path),
   Tags = get_value("tags", {list, binary}, Attr, Path, []),
   Params = get_value("parameters", {list, string}, Attr, Path, null),
+  Body =
+    case proplists:get_value("requestBody", Attr, null) of
+      null -> [];
+      B -> [B]
+    end,
   ReadResponse =
     fun({StatusCode, Resp}) ->
       response(StatusCode, Resp, [{path, Path} | Options], OASVersion)
@@ -84,7 +89,7 @@ mk_operation(Path, Attr, Method, Options, OASVersion) ->
   {IdName, #{Method => #{
                 path => <<BaseUri/binary, BPath/binary>>,
                 tags => Tags,
-                parameters => params_to_json_schema(Params, [{endpoint, IdName} | Options], OASVersion),
+                parameters => params_to_json_schema(Body ++  Params, [{endpoint, IdName} | Options], OASVersion),
                 responses  => Responses
               }}}.
 
@@ -155,8 +160,17 @@ params_to_json_schema(Params, Options, OASVersion) ->
         case proplists:get_value("schema", Param, none) of
           none when OASVersion =:= ?OAS2 -> 
             Param;
-          Schema when OASVersion =:= ?OAS3 ->
-            lists:keydelete("schema", 1, Param) ++ Schema 
+          Schema when OASVersion =:= ?OAS2-> %% [{"$ref", Ref}]
+            lists:keydelete("schema", 1, Param) ++ Schema;
+          Schema when is_list(Schema), OASVersion =:= ?OAS3-> %% [{"type", "integer" | "string"}]
+            lists:keydelete("schema", 1, Param) ++ Schema;
+          none when OASVersion =:= ?OAS3 ->
+            case proplists:get_value("content", Param, none) of
+                none -> Param;
+                [{_ContentType, [{"schema", [{"$ref", _Ref}] = Schema}]}] ->
+                  [{"in", "body"}, {"name", "body"}] ++
+                  lists:keydelete("content", 1, Param) ++ Schema
+            end
         end;
       "#/parameters/" ++ Ref ->
         ParamRefs = proplists:get_value(params, Options, []),

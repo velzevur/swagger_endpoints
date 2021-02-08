@@ -19,7 +19,8 @@ from_yaml_test_() ->
       fun(_) ->
           application:stop(yamerl)
       end,
-      [ {"Parses single definition", fun parses_single_definition/0}
+      [ {"Parses complex scenario v3", fun try_v3/0}
+%     [ {"Parses single definition", fun parses_single_definition/0}
       , {"Parses various definitions", fun parses_definitions/0}
       , {"Parses single endpoint and a definition", fun parses_single_endpoint/0}
       , {"Parses complex scenario", fun parses_complex_scenario/0}
@@ -126,6 +127,25 @@ parses_single_endpoint() ->
     ok.
 
 
+try_v3() ->
+    Gen =
+        fun(Vsn) ->
+            #{ swagger => Vsn
+             , paths => [ req_current_keyblock_height(Vsn)
+                        , req_get_current_keyblock(Vsn)
+                        , req_get_keyblock_by_hash(Vsn)
+                        , req_post_keyblock(Vsn)
+                        ]
+             , definitions => [d_uint(), d_uint16(), d_uint32(), d_uint64(), d_txblockheight(),
+                               d_encodedhash(), d_encodedpubkey(), d_encodedbytearray(),
+                               d_error(),
+                               d_pow(Vsn),
+                               d_keyblock(Vsn)
+                             ]}
+        end,
+    V3Yaml = yaml(Gen(?OAS2)),
+    ?TEST_MODULE:from_yaml(V3Yaml, []).
+
 parses_complex_scenario() ->
     Gen =
         fun(Vsn) ->
@@ -133,6 +153,7 @@ parses_complex_scenario() ->
              , paths => [ req_current_keyblock_height(Vsn)
                         , req_get_current_keyblock(Vsn)
                         , req_get_keyblock_by_hash(Vsn)
+                        , req_post_keyblock(Vsn)
                         ]
              , definitions => [d_uint(), d_uint16(), d_uint32(), d_uint64(), d_txblockheight(),
                                d_encodedhash(), d_encodedpubkey(), d_encodedbytearray(),
@@ -184,7 +205,12 @@ parses_complex_scenario() ->
                                               responses => #{200 => #{<<"$ref">> => <<B/binary, "KeyBlock">>},
                                                              400 => #{<<"$ref">> => <<B/binary, "Error">>},
                                                              404 => #{<<"$ref">> => <<B/binary, "Error">>}},
-                                              tags => [<<"external">>, <<"chain">>]}}}}
+                                              tags => [<<"external">>, <<"chain">>]}},
+            'PostKeyBlock' => #{post => #{parameters => [[{"in","body"}, {"name","body"}, {"description", "Mined key block"}, {"required",true}, {"$ref", D ++ "KeyBlock"}]], path => <<"/v2/key-blocks">>,
+                                          responses => #{200 => undefined, 400 => #{<<"$ref">> => <<B/binary, "Error">>}},
+                                          tags => [<<"internal">>, <<"chain">>]}}
+             }
+          }
       end,
     V2Yaml = yaml(Gen(?OAS2)),
     V2Expected = Expected(?OAS2),
@@ -265,81 +291,78 @@ yaml(Opts) ->
                     , "  schemas:\n"++ Definitions
                     ])
         end,
-%    1 = Str,
+%%    1 = Str,
     [Yaml] =yamerl_constr:string(Str),
     Yaml.
 
-multiline(L) -> lists:concat(lists:join("\n", L)).
+multiline(L) -> lists:concat(lists:join("\n", lists:filter(fun(E) -> E =/= skip end, L))). 
 
-encode_method({Method, #{ tags        := Tags0
-                        , operationid := OperationId
-                        , description := Description
-                        , parameters  := Parameters0
-                        , responses   := Responses0}},
+encode_method({Method, #{ tags            := Tags0
+                        , operationid     := OperationId
+                        , description     := Description
+                        , req_parameters  := ReqParameters
+                        , responses       := Responses0}},
               OASVersion) ->
     Tags =
         multiline(lists:map(
             fun(T) -> "        - " ++ T end, Tags0)),
-    Parameters1 =
-        multiline(lists:map(
-            fun(#{ in := In
-                 , name := Name
-                 , description := ParamDesr
-                 , required := Required
-                 , type := Type }) ->
-                case OASVersion of
-                    ?OAS2 ->
-                        multiline(
-                            [ "        - in: " ++ In
-                            , "          name: " ++ Name
-                            , "          description: '" ++ ParamDesr ++ "'"
-                            , "          required: " ++ Required
-                            , "          type: " ++ Type]);
-                    ?OAS3 ->
-                        multiline(
-                            [ "        - in: " ++ In
-                            , "          name: " ++ Name
-                            , "          description: '" ++ ParamDesr ++ "'"
-                            , "          required: " ++ Required
-                            , "          schema:\n"
-                            , "            type: " ++ Type])
-                end
-            end,
-            Parameters0)),
+    {Parameters1, Body1} = make_req_params(ReqParameters, OASVersion),
     Parameters =
         case length(Parameters1) =:= 0 of
             true ->  "      parameters: []";
             false -> "      parameters:\n" ++ Parameters1
         end,
+    Body =
+        case length(Body1) =:= 0 of
+            true -> skip;
+            false ->
+                case OASVersion of %% OAS2 is handled in params
+                    ?OAS3 ->
+                        "      requestBody:\n" ++ Body1
+                end
+        end,
     Responses =
         multiline(lists:map(
             fun({Code, #{ description := RespDesr
                         , schema := Schema}}) ->
-
+                MaybeSchema =
+                    fun(Str, Prefix) ->
+                        case Schema =:= none of
+                            true -> skip;
+                            false -> Str ++ encode_schema(Schema, Prefix)
+                        end
+                    end,
                 case OASVersion of
                     ?OAS2 ->
                         multiline(
                             [ "        '" ++ integer_to_list(Code) ++ "':"
                             , "          description: '" ++ RespDesr ++ "'" 
-                            , "          schema:\n" ++ encode_schema(Schema, "")]);
+                            , MaybeSchema("          schema:\n", "")]);
                     ?OAS3 ->
                         multiline(
                             [ "        '" ++ integer_to_list(Code) ++ "':"
                             , "          description: '" ++ RespDesr ++ "'" 
-                            , "          content:\n"
-                            , "            application/json:\n"
-                            , "              schema:\n" ++ encode_schema(Schema, "    ")])
+                            , MaybeSchema(multiline([ "          content:\n"
+                                                    , "            application/json:\n"
+                                                    , "              schema:\n"]), "    ")])
                 end
             end,
             Responses0)),
+    MaybeProduces =
+        case OASVersion of
+            ?OAS2 ->
+                "      produces:\n" ++
+                "        - application/json";
+            ?OAS3 -> skip
+        end,
     multiline(
         [ "    " ++ Method ++ ":"
         , "      tags:\n" ++ Tags
         , "      operationId: " ++ OperationId
         , "      description: '" ++ Description ++ "'"
-        , "      produces:"
-        , "        - application/json"
+        , MaybeProduces
         , Parameters
+        , Body
         , "      responses:\n" ++ Responses]).
 
 
@@ -417,12 +440,12 @@ enc_definition(Spec, OASVersion) ->
               ] ++ Optionals)
     end.
 
-request_method(Method, Tags, OperationId, Description, Params, Responses) ->
-    {Method, #{ tags        => Tags
-              , operationid => OperationId
-              , description => Description
-              , parameters  => Params
-              , responses   => Responses}}.
+request_method(Method, Tags, OperationId, Description, ReqParams, Responses) ->
+    {Method, #{ tags            => Tags
+              , operationid     => OperationId
+              , description     => Description
+              , req_parameters  => ReqParams
+              , responses       => Responses}}.
 
 response(Code, Desc, Schema) ->
     {Code, #{description => Desc, schema => Schema}}.
@@ -435,7 +458,7 @@ req_current_keyblock_height(OASVersion) ->
     Get =
         request_method("get", ["external", "chain"],
                       "GetCurrentKeyBlockHeight", "Get the height of the current key block",
-                      [], [success_response(Resp),
+                      #{}, [success_response(Resp),
                            error_response(404, "Block not found", OASVersion)]),
     {"/key-blocks/current/height", [Get]}.
 
@@ -443,7 +466,7 @@ req_get_current_keyblock(OASVersion) ->
     Get =
         request_method("get", ["external", "chain"],
                       "GetCurrentKeyBlock", "Get the current key block",
-                      [], [success_response({ref, "#" ++ definitions(OASVersion) ++ "KeyBlock"}),
+                      #{}, [success_response({ref, "#" ++ definitions(OASVersion) ++ "KeyBlock"}),
                            error_response(404, "Block not found", OASVersion)]),
     {"/key-blocks/current", [Get]}.
 
@@ -457,11 +480,26 @@ req_get_keyblock_by_hash(OASVersion) ->
     Get =
         request_method("get", ["external", "chain"],
                       "GetKeyBlockByHash", "Get a key block by hash",
-                      Params,
+                      #{params => Params},
                       [ success_response({ref, "#" ++ definitions(OASVersion) ++ "KeyBlock"}),
                         error_response(404, "Block not found", OASVersion),
                         error_response(400, "Invalid hash", OASVersion)]),
     {"/key-blocks/hash/{hash}", [Get]}.
+
+req_post_keyblock(OASVersion) ->
+    Body =
+        [#{ in => "body"
+          , name => "body"
+          , description => "Mined key block"
+          , required => "true" 
+          , ref => definitions(OASVersion) ++ "KeyBlock" }],
+    Post =
+        request_method("post", ["internal", "chain"],
+                      "PostKeyBlock", "Post a mined key block",
+                      #{body => Body},
+                      [ success_response(none),
+                        error_response(400, "Invalid block", OASVersion)]),
+    {"/key-blocks", [Post]}.
     
 success_response(RespObj) ->
     response(200, "Successful operation", RespObj).
@@ -521,3 +559,75 @@ d_keyblock(OASVersion) ->
 
 definitions(?OAS2) -> "/definitions/";
 definitions(?OAS3) -> "/components/schemas/".
+
+make_req_params(ReqParams, ?OAS2) ->
+    Params0 = maps:get(params, ReqParams, []) ++ maps:get(body, ReqParams, []),
+    Params =
+        multiline(lists:map(
+            fun(#{ in := In
+                  , name := Name
+                  , description := ParamDesr
+                  , required := Required
+                  } = P) ->
+              Type =
+                  case P of
+                      #{ type := T } ->
+                              "          type: " ++ T;
+                      #{ ref := Ref } ->
+                              "          schema:\n"
+                              "            $ref: '" ++ Ref ++ "'"
+                  end,
+                multiline(
+                    [ "        - in: " ++ In
+                    , "          name: " ++ Name
+                    , "          description: '" ++ ParamDesr ++ "'"
+                    , "          required: " ++ Required
+                    , Type])
+            end,
+            Params0)),
+    {Params, []};
+make_req_params(ReqParams, ?OAS3) ->
+    Params = maps:get(params, ReqParams, []),
+    Body = maps:get(body, ReqParams, []),
+    Parameters1 =
+        multiline(lists:map(
+            fun(#{ in := In
+                 , name := Name
+                 , description := ParamDesr
+                 , required := Required
+                 , type := Type
+                 }) ->
+                multiline(
+                    [ "        - in: " ++ In
+                    , "          name: " ++ Name
+                    , "          description: '" ++ ParamDesr ++ "'"
+                    , "          required: " ++ Required
+                    , "          schema:\n"
+                    , "            type: " ++ Type])
+              end,
+            Params)),
+      ReqBody =
+          multiline(lists:map(
+              fun(#{ in := "body"
+                  , description := ParamDesr
+                  , required := Required
+                  } = P) ->
+                  Type =
+                      case P of
+                          #{ type := T } ->
+                              "              type: " ++ T;
+                          #{ ref := Ref } ->
+                              "              $ref: '" ++ Ref ++ "'"
+                      end,
+                  multiline([
+                      "        content: "
+                    , "          application/json:"
+                    , "            schema:"
+                    , Type
+                    , "        description: '" ++ ParamDesr ++ "'"
+                    , "        required: " ++ Required
+                            ])
+              end,
+              Body)),
+      {Parameters1, ReqBody}.
+
