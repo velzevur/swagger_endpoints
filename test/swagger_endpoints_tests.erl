@@ -206,7 +206,12 @@ parses_complex_scenario() ->
                                                              400 => #{<<"$ref">> => <<B/binary, "Error">>},
                                                              404 => #{<<"$ref">> => <<B/binary, "Error">>}},
                                               tags => [<<"external">>, <<"chain">>]}},
-            'PostKeyBlock' => #{post => #{parameters => [[{"in","body"}, {"name","body"}, {"description", "Mined key block"}, {"required",true}, {"$ref", D ++ "KeyBlock"}]], path => <<"/v2/key-blocks">>,
+            'PostKeyBlock' => #{post => #{parameters => [[{"in","body"},
+                                                          {"name","body"},
+                                                          {"description",
+                                                           "Mined key block"},
+                                                          {"required",true},
+                                                          {"schema", [{"$ref", D ++ "KeyBlock"}]}]], path => <<"/v2/key-blocks">>,
                                           responses => #{200 => undefined, 400 => #{<<"$ref">> => <<B/binary, "Error">>}},
                                           tags => [<<"internal">>, <<"chain">>]}}
              }

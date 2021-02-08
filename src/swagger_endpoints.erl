@@ -161,13 +161,14 @@ params_to_json_schema(Params, Options, OASVersion) ->
           none when OASVersion =:= ?OAS2 -> 
             Param;
           Schema when OASVersion =:= ?OAS2-> %% [{"$ref", Ref}]
-            lists:keydelete("schema", 1, Param) ++ Schema;
+            %%lists:keydelete("schema", 1, Param) ++ Schema;
+            Param;
           Schema when is_list(Schema), OASVersion =:= ?OAS3-> %% [{"type", "integer" | "string"}]
             lists:keydelete("schema", 1, Param) ++ Schema;
           none when OASVersion =:= ?OAS3 ->
             case proplists:get_value("content", Param, none) of
                 none -> Param;
-                [{_ContentType, [{"schema", [{"$ref", _Ref}] = Schema}]}] ->
+                [{_ContentType, [{"schema", [{"$ref", _Ref}]}]= Schema}] ->
                   [{"in", "body"}, {"name", "body"}] ++
                   lists:keydelete("content", 1, Param) ++ Schema
             end
