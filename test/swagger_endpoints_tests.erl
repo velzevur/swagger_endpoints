@@ -19,11 +19,11 @@ from_yaml_test_() ->
       fun(_) ->
           application:stop(yamerl)
       end,
-      [ {"Parses complex scenario v3", fun try_v3/0}
-%     [ {"Parses single definition", fun parses_single_definition/0}
+     [ {"Parses single definition", fun parses_single_definition/0}
       , {"Parses various definitions", fun parses_definitions/0}
       , {"Parses single endpoint and a definition", fun parses_single_endpoint/0}
       , {"Parses complex scenario", fun parses_complex_scenario/0}
+      , {"Parses swagger.yaml from aeternity/aeternity", fun parses_swagger_yaml/0}
       ]}.
 
 parses_single_definition() ->
@@ -218,6 +218,13 @@ parses_complex_scenario() ->
     V3Yaml = yaml(Gen(?OAS3)),
     V3Expected = Expected(?OAS3),
     V3Expected = ?TEST_MODULE:from_yaml(V3Yaml, []).
+
+parses_swagger_yaml() ->
+    [V2Yaml] = yamerl_constr:file("test/swagger_v2.yaml"),
+    V2 = swagger_endpoints:from_yaml(V2Yaml, []),
+    [V3Yaml] = yamerl_constr:file("test/swagger_v3.yaml"),
+    V3 = swagger_endpoints:from_yaml(V3Yaml, []),
+    ok.
 
 yaml(Opts) ->
     G = fun(K, Def) -> maps:get(K, Opts, Def) end,
