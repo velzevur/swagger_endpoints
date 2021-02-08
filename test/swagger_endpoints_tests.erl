@@ -208,10 +208,8 @@ parses_complex_scenario() ->
                                               tags => [<<"external">>, <<"chain">>]}},
             'PostKeyBlock' => #{post => #{parameters => [[{"in","body"},
                                                           {"name","body"},
-                                                          {"description",
-                                                           "Mined key block"},
-                                                          {"required",true},
-                                                          {"schema", [{"$ref", D ++ "KeyBlock"}]}]], path => <<"/v2/key-blocks">>,
+                                                          {"description", "Mined key block"},
+                                                          {"required",true}, {"schema", #{<<"$ref">> => <<B/binary, "KeyBlock">>}}]], path => <<"/v2/key-blocks">>,
                                           responses => #{200 => undefined, 400 => #{<<"$ref">> => <<B/binary, "Error">>}},
                                           tags => [<<"internal">>, <<"chain">>]}}
              }
