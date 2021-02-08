@@ -37,7 +37,7 @@ parses_single_definition() ->
         fun(OASVersion) ->
             D = definitions(OASVersion),
             {[ {D ++ "UInt", #{<<"minimum">> => 0, <<"type">> => <<"integer">>}}
-            ], #{}}
+            ], #{}, D}
       end,
     V2Yaml = yaml(Gen(?OAS2)),
     V2Expected = Expected(?OAS2),
@@ -90,7 +90,7 @@ parses_definitions() ->
               {D ++ "UInt32", #{<<"maximum">> => 4294967295, <<"minimum">> => 0, <<"type">> => <<"integer">>}},
               {D ++ "UInt16", #{<<"maximum">> => 65535,<<"minimum">> => 0, <<"type">> => <<"integer">>}},
               {D ++ "UInt", #{<<"minimum">> => 0, <<"type">> => <<"integer">>}}
-            ], #{}}
+            ], #{}, D}
       end,
     V2Yaml = yaml(Gen(?OAS2)),
     V2Expected = Expected(?OAS2),
@@ -116,7 +116,7 @@ parses_single_endpoint() ->
                 #{get => #{parameters => [], path => <<"/v2/key-blocks/current/height">>,
                            responses => #{200 => #{<<"properties">> => #{<<"height">> => #{<<"$ref">> => <<B/binary, "UInt16">>, <<"description">> => <<"Height">>}}, <<"type">> => <<"object">>},
                                           404 => #{<<"$ref">> => <<B/binary, "Error">>}},
-                            tags => [<<"external">>,<<"chain">>]}}}}
+                            tags => [<<"external">>,<<"chain">>]}}}, D}
       end,
     V2Yaml = yaml(Gen(?OAS2)),
     V2Expected = Expected(?OAS2),
@@ -212,7 +212,8 @@ parses_complex_scenario() ->
                                                           {"required",true}, {"schema", #{<<"$ref">> => <<B/binary, "KeyBlock">>}}]], path => <<"/v2/key-blocks">>,
                                           responses => #{200 => undefined, 400 => #{<<"$ref">> => <<B/binary, "Error">>}},
                                           tags => [<<"internal">>, <<"chain">>]}}
-             }
+             },
+             D
           }
       end,
     V2Yaml = yaml(Gen(?OAS2)),

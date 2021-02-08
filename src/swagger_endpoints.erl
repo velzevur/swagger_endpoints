@@ -35,16 +35,12 @@ from_yaml(Doc, Options0) ->
   Parameters   = proplists:get_value("parameters", Doc, []),
   Definitions  = build_definitions(Definitions0, [], Options0, OASVersion),
   Options      = [{params, Parameters}, {defs, Definitions}, {baseuri, BaseUri} | Options0],
-  {Definitions, endpoint_map(Endpoints,  #{}, Options, OASVersion)}.
+  {Definitions, endpoint_map(Endpoints,  #{}, Options, OASVersion), definitions_prefix(OASVersion)}.
 
 build_definitions([], Definitions, _Options, _OASVersion) ->
   Definitions;
 build_definitions([{Def, Schema} | Defs], Definitions, Options, OASVersion) ->
-  Prefix =
-    case OASVersion of
-      ?OAS2 -> "/definitions/";
-      ?OAS3 -> "/components/schemas/"
-    end,
+  Prefix = definitions_prefix(OASVersion),
   NewDef = {Prefix ++ Def, to_json_schema(Schema, [{defs, Definitions}|Options])},
   build_definitions(Defs, [NewDef | Definitions], Options, OASVersion).
 
@@ -222,3 +218,5 @@ get_version(Doc) ->
             end
     end.
 
+definitions_prefix(?OAS2) -> "/definitions/";
+definitions_prefix(?OAS3) -> "/components/schemas/".

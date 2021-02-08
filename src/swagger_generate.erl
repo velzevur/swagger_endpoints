@@ -1,6 +1,6 @@
 -module(swagger_generate).
 
--export([erlang/4, json_schema/4]).
+-export([erlang/5, json_schema/4]).
 -include_lib("syntax_tools/include/merl.hrl").
 -define(QUOTE(X), ?Q(??X)).
 
@@ -14,7 +14,7 @@ json_schema(FileName, _Map, Definitions, _Options) ->
   Binary = jsx:prettify(jsx:encode(Schema)),
   ok = file:write_file(FileName, Binary).
 
-erlang(FileName, Map, Definitions, Options) ->
+erlang(FileName, Map, Definitions, DefinitionsLocation, Options) ->
   Mod = filename:basename(FileName, ".erl"),
   Body = io_lib:format("~p", [Map]),
   {ok, Version} = application:get_key(swagger_endpoints, vsn),
@@ -27,10 +27,11 @@ erlang(FileName, Map, Definitions, Options) ->
      "%% Reference should be fixed!\n"
      "%% Use jsx:prettify(jsx:encode(json_schema())) to get a JSON string.\n\n",
      "-module("++Mod++").\n\n"
-     "-export([operation/1, operations/0, definitions/0, json_schema/0,\n"
+     "-export([operation/1, operations/0, definitions_prefix/0, definitions/0, json_schema/0,\n"
      "         validate_request/3, validate_response/4, path/3, query/3,\n"
      "         validate/2]).\n\n"
      "operations() ->\n    ", Body, ".\n\n"
+     "definitions_prefix() ->\n    ", DefinitionsLocation, ".\n\n"
      "definitions() ->\n    ", io_lib:format("~p",[Definitions]), ".\n\n"] ++
      [erl_prettypr:format(erl_syntax:form_list(template_code()))],
   ok = file:write_file(FileName, Code).
