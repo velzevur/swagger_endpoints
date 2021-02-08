@@ -31,7 +31,7 @@ erlang(FileName, Map, Definitions, DefinitionsLocation, Options) ->
      "         validate_request/3, validate_response/4, path/3, query/3,\n"
      "         validate/2]).\n\n"
      "operations() ->\n    ", Body, ".\n\n"
-     "definitions_prefix() ->\n    ", DefinitionsLocation, ".\n\n"
+     "definitions_prefix() ->\n    \"", DefinitionsLocation, "\".\n\n"
      "definitions() ->\n    ", io_lib:format("~p",[Definitions]), ".\n\n"] ++
      [erl_prettypr:format(erl_syntax:form_list(template_code()))],
   ok = file:write_file(FileName, Code).
