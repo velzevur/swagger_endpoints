@@ -42,7 +42,7 @@ do(State) ->
         undefined ->
             {error, "Provide swagger file using option --file Filename"};
         Path ->
-            {Defs, Endpoints} = 
+            {Defs, Endpoints, DefinitionsLocation} = 
                 try [YamlDoc] = yamerl_constr:file(Path),
                     rebar_api:info("Generating code from ~p writing to ~p", [Path, Dest]),
                     swagger_endpoints:from_yaml(YamlDoc, KVs)
@@ -50,7 +50,7 @@ do(State) ->
                     _:Reason ->
                         {error, io_lib:format("Failed to parse ~p (~p)", [Path, Reason])}
                 end,
-            try generate(Dest, Endpoints, Defs, [{src, Source}]),
+            try generate(Dest, Endpoints, Defs, DefinitionsLocation, [{src, Source}]),
                 {ok, State}
             catch  
                 _:Error ->
@@ -58,10 +58,11 @@ do(State) ->
             end
     end.
 
-generate(Dest, Endpoints, Definitions, Options) ->
+generate(Dest, Endpoints, Definitions, DefinitionsLocation, Options) ->
     case filename:extension(Dest) of
       ".erl" ->
-        swagger_generate:erlang(Dest, Endpoints, Definitions, Options);
+        swagger_generate:erlang(Dest, Endpoints, Definitions,
+                                DefinitionsLocation, Options);
       ".json" ->
         swagger_generate:json_schema(Dest, Endpoints, Definitions, Options);
       [] ->

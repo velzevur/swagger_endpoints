@@ -1,5 +1,9 @@
-{"1.1.0",
-[{<<"jsx">>,{pkg,<<"jsx">>,<<"2.9.0">>},0},
+{"1.2.0",
+[{<<"jesse">>,
+  {git,"https://github.com/for-GET/jesse.git",
+       {ref,"9126f3db675977f11da8da9b61dd4003f8449618"}},
+  0},
+ {<<"jsx">>,{pkg,<<"jsx">>,<<"2.9.0">>},0},
  {<<"rfc3339">>,
   {git,"git://github.com/andreineculau/rfc3339.git",
        {ref,"dcc77d66430490620677de8140a3415dfbd3fa61"}},
@@ -8,5 +12,8 @@
 [
 {pkg_hash,[
  {<<"jsx">>, <<"D2F6E5F069C00266CAD52FB15D87C428579EA4D7D73A33669E12679E203329DD">>},
- {<<"yamerl">>, <<"5CB124A01A66418D7D8F2382948C89B48C1764079798EAEB9B578DDB3C7DC58B">>}]}
+ {<<"yamerl">>, <<"5CB124A01A66418D7D8F2382948C89B48C1764079798EAEB9B578DDB3C7DC58B">>}]},
+{pkg_hash_ext,[
+ {<<"jsx">>, <<"8EE1DB1CABAFDD578A2776A6AAAE87C2A8CE54B47B59E9EC7DAB5D7EB71CD8DC">>},
+ {<<"yamerl">>, <<"1E4070997E2B1D54A26E241B0B6B1CEBE432053B28E4AE444C9222DC31CDD1FE">>}]}
 ].
