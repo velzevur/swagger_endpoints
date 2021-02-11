@@ -144,12 +144,6 @@ response(StatusCode, Resp, Options, OASVersion) ->
       {Code, Schema}
   end .
 
-params_to_json_schema([], Options, _OASVersion) ->
-  rebar_api:error("~p: use YAML array for parameters not JSON array!",
-                  [proplists:get_value(endpoint, Options)]),
-  [];
-params_to_json_schema(null, _Options, _OASVersion) ->
-  [];
 params_to_json_schema(Params, Options, OASVersion) ->
   [ case proplists:get_value("$ref", Param, none) of
       none ->

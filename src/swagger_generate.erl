@@ -50,7 +50,7 @@ template_code() ->
           path(Method, OperationId, Args) ->
              begin
                #{path := Endpoint, parameters := Parameters} = maps:get(Method, operation(OperationId)),
-               InPath = [ Param || Param <- Parameters, lists:member({"in", "path"}, Param) ],
+               InPath = [ Param || Param <- Parameters, lists:member({"in", "path", "example"}, Param) ],
                lists:foldl(fun(Param, Path) -> 
                                Name = proplists:get_value("name", Param),
                                case {proplists:get_value("required", Param, false),
