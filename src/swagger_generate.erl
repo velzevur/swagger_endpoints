@@ -103,7 +103,7 @@ template_code() ->
             validate_request(OperationId, Method, Args) when is_list(Args) ->
              begin
                prepare_validation(),
-               #{parameters := Parameters} = maps:get(Method, endpoints:operation(OperationId)),
+               #{parameters := Parameters} = maps:get(Method, operation(OperationId)),
                ToCheck = [ Param || Param <- Parameters, not lists:member({"in", "path"}, Param) ],
                Errors = lists:foldl(fun(Param, Errs) -> 
                                         Name = proplists:get_value("name", Param),
@@ -126,7 +126,7 @@ template_code() ->
              end.),
    ?QUOTE(validate_response(OperationId, Method, StatusCode, Response) ->
              begin
-               #{responses := Resps} = maps:get(Method, endpoints:operation(OperationId)),
+               #{responses := Resps} = maps:get(Method, operation(OperationId)),
                prepare_validation(),
                case maps:get(StatusCode, Resps, error) of
                  error -> {error, {StatusCode, unspecified}};
