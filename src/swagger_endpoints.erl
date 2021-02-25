@@ -162,7 +162,12 @@ params_to_json_schema(Params, Options, OASVersion) ->
                   lists:keydelete("content", 1, Param) ++ [{"schema", to_json_schema(Schema, Options)}]
             end
         end;
-      "#/parameters/" ++ Ref ->
+      ParamPath when is_list(ParamPath) ->
+        Ref =
+            case ParamPath of
+              "#/parameters/" ++ R0 when OASVersion =:= ?OAS2 -> R0;
+              "#/components/parameters" ++ R0 when OASVersion =:= ?OAS3 -> R0
+            end,
         ParamRefs = proplists:get_value(params, Options, []),
         case lists:keyfind(Ref, 1, ParamRefs) of
           false ->
